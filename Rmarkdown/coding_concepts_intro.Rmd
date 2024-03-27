@@ -1,0 +1,215 @@
+---
+title: "Coding Concepts"
+output:
+  pdf_document: default
+  ioslides_presentation:
+    highlight: pygments
+  slidy_presentation:
+    highlight: pygments
+  html_document: default
+  beamer_presentation:
+    highlight: pygments
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#  Implementing Functions in R 
+
+Format for a basic function in R
+
+<span style="color: orange;"> #' documentation that describes inputs, outputs and what the function does
+
+<span style="color: orange;"> FUNCTION NAME = function(inputs, parameters) {
+
+<span style="color: orange;">body of the function (manipulation of inputs)
+
+<span style="color: orange;">return }</span>
+
+In R, inputs and parameters are treated the same; but it is useful to think about them separately in designing the model - collectively they are sometimes referred to as arguments
+
+#  Best practices for model (software) development 
+
+## Common problems
+
+* Unreadable code (hard to understand, easy to forget how it works, hard to find errors, hard to expand)
+
+* Overly complex, disorganized code (hard to find errors; hard to modify-expand)
+
+* Insufficient testing (both during development and after)
+
+* Not tracking code changes (multiple versions, which is correct?)
+
+
+
+#  Best practices for model (software) development 
+
+Basic Solution
+
+Structured practices that ensures
+clear, readable code 
+
+* meaningful variables names 
+
+* comments to explain the workflow
+
+* documentation to explain functionality 
+
+* modularity (organized “independent” building blocks)
+
+*  testing frequently as you develop each module and after
+
+* code evolution is documented (version control)
+
+
+
+
+#  Best practices for model (software) development 
+
+" *Let us change our traditional attitude to the construction of programs: Instead of imagining that our main task is to instruct a computer what to do, let us concentrate rather on explaining to humans what we want the computer to do. -- Donald E. Knuth, Literate Programming, 1984* "
+
+Developing readable (by PEOPLE) code and documenting what you are doing is essential
+
+*“When was the last time you spent a pleasant evening in a comfortable chair, reading a good program?”— Bentley (1986)*
+
+
+
+#  Documentation! 
+
+Makes it easier for you to fix issues, refine and easier for others to use
+
+For functions (model) you should always include the following in your code
+
+* The goal of the model
+
+ * Model inputs (description, name and units)
+
+* Model output (description, name and units)
+
+* Where the model (or submodel) comes from (source papers)
+
+In line explanation for key steps
+
+Always use meaningful names for functions, variables, inputs and outputs
+
+Always put your function in its own file - with just the documentation
+
+
+
+
+
+#   Building Models 
+
+Another example: Okuns Law (conceptual, abstract model) - try implementing this as a function
+
+Graph of US quarterly data (not annualized) from 1947 through 2002 estimates a form of the difference version of 
+
+Okun's law:
+
+**%Change GNP = 3.2 - 1.8(Change Unemployment Rate)** 
+
+R\^2 of .463. 
+
+Differences from other results are partly due to the use of quarterly data
+http://en.wikipedia.org/wiki/Okun%27s_law
+
+Write the function in R!
+
+what is change in GDP for unemployment rate change of 3%
+
+what would the change in GDP be for 3% change in unemployment rate if the slope was 10% steeper
+
+
+```{r, okum example}
+
+# from Okum's Law - change in GDP is a linear function of change in unemployment rate
+# note for teaching I'm coding this inline but a good practice is to code the function in its own R file
+compute_GDP_change = function( unemploy_change, slope=-1.8, intercept=3.2) {
+  delta_GDP = intercept + slope*unemploy_change
+  return(delta_GDP)
+}
+
+# now lets run the function to see what change in GDP is for 3% change in unemployment rate
+
+compute_GDP_change(3)
+
+# what if unemployment was even more sensitive
+compute_GDP_change(3, slope = -10)
+
+```
+
+
+
+
+---
+
+#  Building Models:Documentation 
+
+There is also a standard format for documentation that can be read by automatic programs (roxygen2) - an R package that generate “standard” R documentation - manual or help pages
+
+These automated approaches for building documentation (like roxygen2) and meta data (descriptions of data sets) are increasingly common - so you should get into the practice of being structured in your approach to documentation
+
+We will use the conventions that work with roxygen2 - and then use this program to generate formal R documentation. Roxygen is similar to Doxygen which is used for C code…so its a widely used format
+
+---
+
+# Lists (Short Review) - 
+
+For returning more than one item from your function!
+
+* Lists are the most “informal” data structures in R
+
+* List are really useful for keeping track of and organizing groups of things that are not all the same
+
+* A list could be a table where number of rows is different for each column
+
+* A list can have numeric, character, factors all mixed together
+
+*  List are often used for returning more complex information from function (e.g. lm)
+
+# Examples 
+
+Here are some examples of how to create and manipulate lists
+
+```{r lists}
+# simple list
+sale =  list(number=c(2,4,9), quality="high", what="apple", cost=4)
+sale
+sale$cost
+sale$number
+sale[4]
+
+```
+
+# Lists and Functions
+
+Lists are used to return multiple values from functions
+
+
+<center>
+**return(list(....))**
+</center>
+
+# Example - Biodiversity function
+
+ 
+ * take a look at the *compute_diversity* function  - any questions about what it does?
+ 
+# Sample data for Biodiversity Function
+```{r}
+
+# get the function
+source("../R/compute_diversity.R")
+
+# sampling categorical data
+# create possible values
+flower_types = c("iris","daisy","poppy","rose","dandelion","weed","violet")
+# sample (with replacement)
+garden = sample(flower_types, size=20, replace=T)
+compute_diversity(garden)
+```
+ 
+ 
+ Try it
+ * modify to also return the *rarest* species
+ 
