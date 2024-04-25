@@ -1,0 +1,150 @@
+---
+title: "Glue"
+output: html_document
+---
+
+# Glue - generalized uncertainty analysis
+
+What if we wanted to keep all of the 'good' parameters
+
+* we could just keep them all as equally likely
+* we could weight them by performance
+
+Either way we can graph and come up with 'best' prediction accounting for uncertainty
+
+Create a single measure of accuracy - above we used *compute_lowlowmetrics_all* to compute an accuracy measure based on
+
+* relative error in annual minimum flow estimate
+* relative error in monthly flow during low flow period
+* correlation between observed and modelled annual minimum flow
+* correlation between observed and modelled flow during the low flow period
+
+We weighted all 4 the same
+
+# Use the accuracy measure 
+
+We can use the combined accuacy measure to define behavioural (acceptible) parameter set (**res_acc**) - two options
+
+* define a threshold (we will use 30%)
+* take top 50 performing parameter sets
+
+(we go with the latter but code could be commented to go with threshold approach)
+
+Assumes you have have already gone through compute_performance_metrics.Rmd to create *res* matrix with all of your performance metrics values
+
+```{r behavioral, echo=FALSE}
+
+
+summary(res$combined)
+
+# 1) selecting behaviorial or acceptable parameters sets
+
+threshold = 0.3
+res_acc = subset(res, combined > threshold)
+head(res_acc)
+
+# as an alternative  what if you want the top N parameter sets
+topN = 50
+tmp = res[order(res$combined,decreasing=T),]  
+res_acc=tmp[1:topN,]
+head(res_acc)
+```
+
+# Defining weights (likelihood) for parameter sets
+
+Now define "weights" (likelihood) based on parameter performance for the acceptable or behaviorial parameters
+
+We want the sum of the weights to equal 1
+
+* accuracy measure defined above will define weight
+* we normalize by the range of accuracy for the behavioural parameters  
+* this **relative accuracy ** becomes the weight
+* note we now only work with behavioural parameter sets (in ** res_acc ** versus ** res **)
+
+
+
+```{r weighting, echo=FALSE}
+
+# create a weight for each parameter set based on its relative accuracy - we do this so all weights sum to 1
+max_acc=max(res_acc$combined)
+min_acc=min(res_acc$combined)
+res_acc$w_acc=(res_acc$combined-min_acc)/(max_acc-min_acc)
+sum_acc=sum(res_acc$combined)
+res_acc$wt_acc=res_acc$combined/sum_acc
+
+# look at values
+summary(res_acc$wt_acc)
+# check to see that they sum to one
+sum(res_acc$wt_acc)
+
+Nacc = nrow(res_acc)
+Nacc
+```
+
+# Using weights
+
+One way to use weights is to define a maximum likelihood estimate by averaging (weighted by accuracy) streamflow from all behavioural simulations 
+
+
+
+```{r mle, echo=FALSE}
+
+# generate a streamflow as weighted average of all  acceptable parameter sets
+
+# recall that msagel is the flow data for all runs so we 
+# can link with weights from res_acc by run id
+msagel  =  msage %>% pivot_longer(cols=!c(date, month, year, day,wy, obs), names_to="sim", values_to="flow")
+
+
+# subset only acceptable runs
+msagel_acc = subset(msagel, sim %in% res_acc$sim)
+# join with weights from res_acc, left_join will repeat weights for each day in streamflow trajectory
+msagel_acc = left_join(msagel_acc, res_acc, by="sim")
+head(msagel_acc)
+# finally multiply flow by weight
+msagel_acc = msagel_acc %>% mutate(flow_wt = flow*wt_acc)
+
+# now we can average streamflow for each day from all the runs # using the weights
+aver_flow = msagel_acc %>% group_by(date) %>% dplyr::summarize(meanstr = sum(flow_wt))
+
+# add some date information or simply add to simQ
+
+ggplot(aver_flow, aes(x=date, y=meanstr))+geom_line(col="red")+labs(y="Streamflow mm/day")
+
+# add some of the other date info and plot a subset
+aver_flow$wy = msage$wy
+wycheck=1985
+ggplot(subset(aver_flow, wy == wycheck), aes(x=date, y=meanstr))+geom_line(col="blue")+labs(y="Streamflow mm/day")+geom_line(data=subset(msage, wy==wycheck), aes(date, obs), col="red")
+
+```
+We could also compute quantiles rather than just mean
+
+We can use the *wtd_quantile* function in the *Hmisc* package to do this - it computes quantiles accounting for different weights on each observation
+
+```{r plotting, echo=TRUE}
+ 
+# compute quantiles based on performance weights
+quant_flow = msagel_acc %>% group_by(date) %>% dplyr::summarize(
+  flow10=wtd.quantile(x=flow, weight=wt_acc, q=0.1),
+  flow50=wtd.quantile(x=flow, weight=wt_acc, q=0.5),
+  flow90=wtd.quantile(x=flow, weight=wt_acc, q=0.9)
+)
+
+
+# ad observed back
+quant_flow_obs = left_join(quant_flow, msage[,c("date","month","year", "day","wy","obs")], 
+                       by=c("date"))
+
+# format for plotting
+quant_flowl = quant_flow_obs %>% pivot_longer(col=c(flow10, flow50, flow90, obs), 
+                                          values_to="flow", names_to="quantile")
+
+# plot
+ggplot(subset(quant_flowl, wy==1985), aes(date, flow, col=quantile))+geom_line()
+
+# to see low flows, transform y-axis
+ggplot(subset(quant_flowl, wy==1980), aes(date, flow, col=quantile))+
+  geom_line()+scale_y_continuous(trans="log")
+
+
+```
