@@ -1,0 +1,194 @@
+---
+title: "simpledynamic"
+output: html_document
+date: '2022-04-28'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(purrr)
+
+```
+
+# Implementing Dynamic Models in R
+
+Dynamic models always involves derivatives (equations that express how things change from time step to time step or place to place )
+
+
+Implement population **growth** as a derivative - a model of population change
+
+```{r derivaties, echo=TRUE}
+
+# note that we include time here but we don't use it; we will need this later
+source("../R/dexppop.R")
+
+# see how it works
+dexppop(P=20, r=0.01)
+
+
+#what is this?
+
+# notices this is the same as
+dexppop(t=100,P=20, r=0.01)
+
+# lets look at this for a range of initial populations
+pops = seq(from=1, to=100)
+tmp = pops %>% map(~dexppop( time=0,r=0.01, P=.x))
+pchange = unlist(tmp)
+
+
+pdyn = data.frame(pops, pchange)
+ggplot(pdyn, aes(pops, pchange))+geom_point(col="green", size=1.5)
+
+
+# why is this a straight line?
+# how many new individuals are born at each population level
+
+# try this - add a carrying capacity (dP/dt = 0 if P > carryingcapacity)
+```
+
+# Integration
+
+What if we wanted to look at population in 20 years given an initial condition
+
+Two options
+
+* explicit solution to differential equation is known; e.g. you can integrate both sides of the equation! Not always possible but lets look at a case where it is possible
+
+* must be solved by iteration; this is what we do when we can't integrate both sides 
+
+# Explicit Solution is available
+
+
+```{r explicit}
+source("../R/exppop.R")
+
+# gives population after any time given an initial population
+
+# 20 rabbits, growth rate of 0.01 how many in 30 years
+exppop(T=30, P0=20, r=0.01, K=1000)
+
+# if we want to see how population evolves over time - generate a time series by running our model for each point in time
+
+initialrabbits = 20
+years = seq(from=1, to=100, by=2)
+Ptime = years %>% map_dbl(~exppop( P0=initialrabbits, r=0.01, K=1000, T=.x))
+
+# keep track of what times we ran
+Ptime = data.frame(P=Ptime, years=years)
+
+ggplot(Ptime, aes(years,P))+geom_point()+labs(x="years",y="Rabbit Population")
+
+# try generating results for maximum and minimum possible r values to compare (guess at what you think)
+
+
+max_r = 0.1
+min_r = 0.01
+K = 1000
+
+tmp = years  %>% map_dbl(~exppop(r=max_r, P0=initialrabbits, K=K, T=.x))
+Ptime$Pmaxr = tmp
+tmp = years %>% map_dbl(~exppop(r=min_r, P0=initialrabbits, K=K, T=.x))
+Ptime$Pminr = tmp
+
+head(Ptime)
+Ptimep = Ptime %>% gather(key="r",value="P",-years)
+ggplot(Ptimep, aes(years,P, col=r))+geom_point()+labs(x="years",y="Rabbit Population")
+
+# notice how populatin becomes unstable for high growth rates! 
+
+
+```
+
+
+# Solving by thinking of problem as a difference equations
+
+Population models can be discrete (rather than continuous)
+
+So we could implement them as difference equations and iterate
+
+
+```{r iterate1}
+source("../R/discrete_logistic_popK.R")
+# notice how a for loop is used to iterate
+
+# how many rabbits after 50 years given a growth of 0.1
+# starting with 1 rabbit - but a carrying capcity of 500
+
+discrete_logistic_pop
+
+discrete_logistic_pop(P0=1, r=0.05,K=200, T=50)
+
+# save results
+discrete_result = discrete_logistic_pop(P0=1, r=0.05, K=200, T=50)
+
+# lets also keep the parameters for use later
+P0=1
+r=0.05
+K=200
+T=50
+
+```
+
+# Compare discrete and analytic results
+
+Save the results from both to compare
+
+
+```{r closed}
+
+source("../R/exppop.R")
+
+exppop(P0=P0, r=r, K=K, T=T)
+analytic_result = exppop(P0=P0, r=r, K=K, T=T)
+
+analytic_result
+discrete_result
+
+# why are they different
+# look at trajectories
+
+growth_result = data.frame(time=seq(from=1,to=100))
+
+growth_result$Panalytic = growth_result$time %>% map_dbl(~exppop( P0=1,r=0.05, K=200,T=.x ))
+
+growth_result$Pdiscrete = growth_result$time %>% map_dbl(~discrete_logistic_pop( P0=1,r=0.05, K=200,T=.x ))
+
+tmp = growth_result %>% gather(key="Ptype",value="P",-time)
+ggplot(tmp, aes(time,P, col=Ptype))+geom_point()
+
+# try running them for longer time periods to see what happens 
+# change the value of r, K , P0 - see how it effects the results
+```
+
+
+# ODE example
+```{r usingode}
+
+
+source("../R/dexppop.R")
+
+dexppop
+library(deSolve)
+initialrabbits = 20
+years = seq(from=1, to=100, by=2)
+
+# run the solver
+Ptime = ode(y=initialrabbits, times=years, func=dexppop,parms=c(0.01))
+head(Ptime)
+colnames(Ptime)=c("year","P")
+
+# notice that there are additional pieces of information year, including the method used for integration
+attributes(Ptime)
+
+# this also means you need to extract just the data frame for plotting
+ggplot(as.data.frame(Ptime), aes(year,P))+geom_point()+labs(y="Population", "years")
+
+# this also works (of course function can be by order)
+Ptime=ode(initialrabbits, years, dexppop,0.03)
+colnames(Ptime)=c("year","P")
+ggplot(as.data.frame(Ptime), aes(year,P))+geom_point()+labs(y="Population", "years")
+
+
+```
