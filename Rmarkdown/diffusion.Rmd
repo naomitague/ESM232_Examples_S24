@@ -1,0 +1,54 @@
+---
+title: "Diffusion"
+output: html_document
+---
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(deSolve)
+
+```
+
+# R implementation
+
+```{r}
+source("../R/diffusion.R")
+
+# run our diffusion model (iterative difference equation) with initial concentration of 10, for 8 timestep (size 1m), and 10 space steps (size 1s)
+# using diffusion parameters 0.5 s/m2, 10 m2
+result = diff1(initialC=10, nx=10, dx=1, nt=8, dt=1, D=0.5, area=10)
+
+# a list is returned with our 3 data frames for concentration (conc), qin and qout
+result
+
+# used filled contour to plot results
+head(result$conc)
+filled.contour(result$conc, xlab="Time", ylab="Distance")
+
+# or if you prefer this orientation (Distance on x axis)
+filled.contour(t(result$conc), ylab="Time", xlab="Distance")
+```
+
+# Change parameters (diffusivity D, and space and time steps (dx, dt))
+
+```{r}
+# changes diffusivity and other parameters particularly
+# diffusivity, dx and dt
+res=diff1(initialC=10,nx=10,dx=1,nt=10,dt=30,D=0.006,area=1)
+
+filled.contour(res$conc, xlab="Time", ylab="Distance")
+
+
+# we can also see how much material moved from place to place each time step
+filled.contour(res$qin, xlab="Time", ylab="Distance")
+
+
+# play with time step, space step and parameters
+
+
+```
+
