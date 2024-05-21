@@ -1,0 +1,645 @@
+---
+title: 'Dynamic systems with more than one dependent variable'
+output:
+  slidy_presentation:
+    highlight: pygments
+  html_document: default
+  pdf_document: default
+  ioslides_presentation:
+    highlight: pygments
+  beamer_presentation:
+    highlight: pygments
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(sensitivity)
+library(tidyverse)
+library(deSolve)
+library(lhs)
+library(purrr)
+library(ggpubr)
+```
+
+# Systems of equations
+
+What if we have more than one variable that is evolving through time and space?
+
+
+  * populations of two species that are changing through time, and interact with each other
+  
+  * pollutant concentrations in a diffusion-advection model where the two pollutants also interact with each other
+  
+  * growth of above-ground and below-ground carbon and nitrogen in a forest
+  
+  * household consumption and savings through time (when consumption depends on savings and vice versa)
+  
+
+These require several differential equations that have to be solved simultaneously 
+
+<span style="color:orange">Systems of equations</span>
+
+# Systems of equations
+
+* can be ordinary (differentiating with respect to one variable (time or space))
+
+* partial if differentiating with respect to multiple variables (x,y,z, time)
+
+
+We can estimate trajectories of systems of equations in much the same way that we
+used numerical integration for our ODE's
+
+
+Here again methods (especially for complicated parital derivative system of equations ) can be complicated
+
+Call your engineering/math when you run into issues!
+
+# Dynamics of two (or more) variables
+
+* two variable dynamic models that have feedbacks between variables can create cyclical
+dynamics (and more complex )
+
+* Two ways to look at results
+
+  * time series of each state variable
+  
+  * how state variables interact with each other
+
+
+#  Predator-Prey Models 
+
+Predator-Prey models
+
+A simple approach that assumes
+prey grow exponentially, with a fixed intrinsic growth rate
+
+* a fixed mortality rate of predators
+* a fixed rate of consumption/predation rate of prey by predators
+* a fixed conversion rate (ingestion rate) that determines how many “new” predators you get with predation
+* no environmental effects (e.g no carrying capacity)
+
+
+
+---
+
+#  Predator-Prey Model 
+
+Analogs
+
+As with diffusion, the basic form/ideas in this model can be applied elsewhere
+
+* economics
+
+* infectious disease spread
+
+* combustion
+
+---
+
+# Differential equations for a Predator-Prey Model
+
+* Prey
+
+$\frac{\partial prey}{\partial t} = r_{prey} * prey - \alpha * prey * pred$
+
+* Predator
+
+$\frac{\partial pred}{\partial t} = eff * \alpha * pred * prey - mort * pred$
+
+# Predator Prey - Implementation in R
+
+* Ordinary Differential Equation with two dependent variables
+
+* Still use **ODE** solve in R
+
+* Still code the derivative as a function 
+
+* Use lists or vectors to bring in initial conditions for all dependent variables; (similar how we bring in multiple parameters to derivative definition function)
+
+* use *with* can help make it easier to code the use of parameters within the derivative definition function (see example below)
+
+* use lists to output derivatives for all dependent variable
+
+# Example implementation
+
+```{r}
+source("../R/lotvmod.R")
+lotvmod
+
+# note the use of with
+# initial conditions
+currpop = c(prey=10, pred=1)
+
+# time points to see results
+days = seq(from=1, to=100, by=1)
+
+# set parameters
+pars = c(rprey=0.5, alpha=0.3, eff=0.2,pmort=0.2, K=100)
+
+# run the model
+res = ode(func=lotvmod, y=currpop, times=days, parms=pars)
+
+
+```
+
+# Run this model - how would you visualize results?
+
+# Visualizing results
+
+* two variable dynamic models that have feedbacks between variables can create cyclical
+dynamics (and more complex )
+
+* Two ways to look at results
+
+  * time series of each state variable  (pred and prey)
+  
+  * how state variables interact with each other
+
+# Relationship between populations
+```{r}
+# graph the results
+head(res)
+# rearrange for easy plotting
+resl = as.data.frame(res) %>% pivot_longer(-time, names_to="animal", values_to="pop")
+p1=ggplot(resl, aes(time, pop, col=animal))+geom_line()
+
+p1
+
+
+p2=ggplot(as.data.frame(res), aes(pred, prey))+geom_point()+labs(y="Prey",x="Predators")
+p2
+
+# To make this easier to understand - maybe
+p2b=ggplot(as.data.frame(res), aes(pred, prey, col=time))+geom_point()+labs(y="Prey",x="Predators")
+p2b
+ 
+ggarrange(p1,p2b)
+
+
+
+
+```
+
+# Try other parameters - try to bring relative size of predictors (versus prey) higher
+
+
+# Other illustations
+
+
+* Prey
+
+$\frac{\partial prey}{\partial t} = r_{prey} * prey - \alpha * prey * pred$
+
+* Predator
+
+$\frac{\partial pred}{\partial t} = eff * \alpha * pred * prey - mort * pred$
+
+Predator and Prey with Carrying Capacity?
+
+How would you code that?
+
+
+# With Carrying Capacity
+
+* Prey
+
+$\frac{\partial prey}{\partial t} = r_{prey} * (1-\frac{prey}{K})*prey - \alpha * prey * pred$
+
+* Predator
+
+$\frac{\partial pred}{\partial t} = eff * \alpha * pred * prey - mort * pred$
+
+# Implementation
+
+```{r examples}
+
+source("../R/lotvmodK.R")
+lotvmodK
+
+# initial conditions
+currpop=c(prey=1, pred=1)
+
+# set parameter list
+pars = c(rprey=0.1, alpha=0.6, eff=0.8,pmort=0.4, K=20)
+
+# times when you want to evaluate
+days = seq(from=1,to=500)
+
+# run our differential equation solver
+res = ode(func=lotvmodK, y=currpop, times=days, parms=pars)
+
+# rearrange for plotting
+resl = as.data.frame(res) %>% pivot_longer(-time, names_to="species", values_to="pop")
+
+# graph both populations over time
+p1=ggplot(resl, aes(time, pop, col=species))+geom_line()
+p1
+
+# also look at relationships between preditor and prey population and use color for time 
+# I will remove the legend here to make it easier to see 
+p2 = ggplot(as.data.frame(res), aes(pred, prey, col=(round(time/10))))+geom_point()+theme(legend.position = "none")
+p2
+p2 = ggplot(as.data.frame(res), aes(pred, prey, col=as.factor(round(time/10))))+geom_point()+theme(legend.position = "none")
+p2
+ggarrange(p1,p2)
+
+# try with different parameter sets, can you create one where populations are stable - less cycling?
+
+```
+
+# Competition
+
+Species 1 (or Company 1)
+
+$\frac{\partial s_1}{\partial t} = r_{1} * s_1 * (1-(\frac{s_1+\alpha_{12} * s_2}{K_1}))$
+
+Species 2 (or Company 2)
+
+$\frac{\partial s_2}{\partial t} = r_{2} * s_2 * (1-(\frac{s_2+\alpha_{21} * s_1}{K_2}))$
+
+How might you explain what this is doing?
+
+
+
+# Competition
+
+
+Species 1 (or Company 1)
+
+$\frac{\partial s_1}{\partial t} = r_{1} * s_1 * (1-(\frac{s_1+\alpha_{12} * s_2}{K_1}))$
+
+Species 2 (or Company 2)
+
+$\frac{\partial s_2}{\partial t} = r_{2} * s_2 * (1-(\frac{s_2+\alpha_{21} * s_1}{K_2}))$
+
+* $s_1, s_2$ are species populations
+* $r_1, r_2$ are growth rates of each species
+* $K_1, K_2$ are carrying capacities; could be the same for both species but maybe not?
+* $\alpha_{12}, \alpha_{21}$ are competitive effect of the other species; could be the same for both species
+
+# And just for fun
+
+* Lorenz Equations (for fluid dynamics), P, R, B are parameters (fixed values), x,y,z variables that change with time that describe how conveciton in the atmosphere works - a cell that is warmed from below and cooled from above
+
+* Developed by Meteorologist Edward Lorenz - early climate model development in 1960s
+
+  * fluid convection
+  * x rate of convective overturning
+  * y departure from linear horizontal temperature gradient
+  * z departure from linear vertical temperature difference
+  
+
+* Lorenz equations are example of dynamic systems that can exhibit stable and chaotic states depending on parameters and initial conditions
+
+# Code for Lorenz system
+
+Lets look at a Lorenz System Code
+```{r lorenze}
+# lorenze
+source("../R/lorenz.R")
+
+lorenz
+```
+
+# Application of Lorenz 
+
+* demonstrates how you can swtich to a different stable trajectory
+
+
+```{r lorenzeapp}
+pars = list(a=10,b=28,c=8/3)
+res = ode(func=lorenz, c(x=0.1,y=0,z=0), times=seq(0,50,by=0.01), parms=pars)
+
+ggplot(as.data.frame(res), aes(x,y, col=time))+geom_point()
+ggplot(as.data.frame(res), aes(x,z, col=time))+geom_point()
+ggplot(as.data.frame(res), aes(y,z, col=time))+geom_point()
+
+resl = as.data.frame(res) %>% gather(key="var", value="value",-time)
+ggplot(resl, aes(time, value, col=var))+geom_line()
+
+# try with different initial conditions
+pars = list(a=15,b=28,c=8/4)
+res = ode(func=lorenz, c(x=0.3,y=5,z=10), times=seq(0,50,by=0.01), parms=pars)
+
+ggplot(as.data.frame(res), aes(x,y, col=time))+geom_point()+scale_colour_gradientn(colours = terrain.colors(10))
+ggplot(as.data.frame(res), aes(x,z, col=time))+geom_point()+scale_colour_gradientn(colours = terrain.colors(10))
+ggplot(as.data.frame(res), aes(y,z, col=time))+geom_point()+scale_colour_gradientn(colours = terrain.colors(10))
+
+resl = as.data.frame(res) %>% gather(key="var", value="value",-time)
+ggplot(resl, aes(time, value, col=var))+geom_line()
+
+
+```
+
+
+# Sensitivity analysis
+
+Consider pred-prey 
+BUT what will be the output - if we want to 'quantify sensitivity'
+useful to look at a single value or set of value
+
+For example
+
+* Max Prey Population
+* Min Prey Population
+
+
+# Sensitivity Analysis steps
+
+* Generate parameters (LHS, Sobol)
+* Metrics function
+* Wrapper Function
+* Run wrapper function to get metrics for all parameter sets
+* Graph and compute sensitivity statistics
+
+ I've also given you an example using Latin Hypercube Sampling 
+* optional review in discussion section
+
+# Example Sensitivity Analysis
+
+Given a Predator Prey model with the possible values for parameters
+
+* $K$ - mean of 150, standard deviation 20
+* $r_{prey}$ - some where between 0.01 and 0.3
+* $\alpha$ - somewhere between 0.1 and 0.4
+* $eff$ - mean 0.3 standard deviation 0.01
+* $pmort$ - somewhere between 0.01 and 0.45
+
+How do the maximum and minimum numbers of predators and prey vary across parameters; which is most important in controlling population dynamics?
+
+Given that we start with 1 predator and 1 prey and run for 500 time steps
+
+```{r odesen}
+
+source("../R/lotvmodK.R")
+# lets start with sobol 
+library(sensitivity)
+
+
+# want to learn about sensitivity to growth rate (r) and carrying capacity 
+# set the number of parameters
+np=200
+K = rnorm(mean=150, sd=20, n=np)
+rprey = runif(min=0.01, max=0.3, n=np)
+alpha= runif(min=0.1, max=0.4, n=np)
+eff= rnorm(mean=0.3, sd=0.01, n=np)
+pmort= runif(min=0.01, max=0.45, n=np)
+
+X1 = cbind.data.frame(rprey=rprey, K=K, alpha=alpha, eff=eff, pmort=pmort)
+
+# repeat to get our second set of samples
+np=200
+K = rnorm(mean=150, sd=20, n=np)
+rprey = runif(min=0.01, max=0.3, n=np)
+alpha= runif(min=0.1, max=0.4, n=np)
+eff= rnorm(mean=0.3, sd=0.01, n=np)
+pmort= runif(min=0.01, max=0.45, n=np)
+
+X2 = cbind.data.frame(rprey=rprey, K=K, alpha=alpha, eff=eff, pmort=pmort)
+
+
+# create our sobel object and get sets ofparameters for running the model
+sens_PP = sobolSalt(model = NULL,X1, X2, nboot = 300)
+
+# name parameter sets...
+colnames(sens_PP$X) = c("rprey","K","alpha","eff","pmort")
+
+# our metrics 
+# lets say we  want the maximum and minimum  of both predictor and prey
+
+compute_metrics = function(result) {
+  maxprey = max(result$prey)
+  maxpred = max(result$pred)
+  minprey = min(result$prey)
+  minpred = min(result$pred)
+return(list(maxprey=maxprey, minprey=minprey, maxpred=maxpred, minpred=minpred))}
+
+# build a wrapper function
+
+
+p_wrapper = function(rprey,alpha, eff, pmort, K, currpop, days, func) {
+    parms = list(rprey=rprey, alpha=alpha, eff=eff, pmort=pmort, K=K)
+    result = ode(y=currpop, times=days, func=func, parms=parms) 
+    colnames(result)=c("time","prey","pred")
+  # get metrics
+  metrics=compute_metrics(as.data.frame(result))
+  return(metrics)
+}
+
+
+# run our model for all parameters and extract the results
+currpop=c(prey=1, pred=1)
+days = seq(from=1,to=500)
+allresults = as.data.frame(sens_PP$X) %>% pmap(p_wrapper, currpop=currpop, days=days, func=lotvmodK)
+ 
+# take results back to unlisted form
+allres = allresults %>% map_dfr(`[`,c("maxprey","minprey","maxpred","minpred"))
+
+
+# range of response across parameter uncertainty
+allresl = allres %>% gather(key="metric",value="pop")
+ggplot(allresl, aes(metric, pop))+geom_boxplot()
+
+# dealing with different scales
+ggplot(allresl, aes(metric, pop, col=metric))+geom_boxplot()+facet_wrap(~metric, scales="free")
+# plot cummulative densities
+
+ggplot(allresl, aes(pop, col=metric))+stat_ecdf(geom="line")+facet_wrap(~metric, scales="free")
+
+# create sobol indices for Max Prey
+sens_PP_maxprey = sens_PP %>% sensitivity::tell(y=allres$maxprey)
+rownames(sens_PP_maxprey$S)=c("rprey","K","alpha","eff","pmort")
+sens_PP_maxprey$S
+rownames(sens_PP_maxprey$T)=c("rprey","K","alpha","eff","pmort")
+sens_PP_maxprey$T
+```
+# Stablity
+
+* simple mathematical definition - when derivatives are zero
+  * algerbra
+  * plotting
+  
+* more complex definitions - think of metrics that looks at
+ranges, cycling, return to a population above some threshold after disturbance
+
+* for more complex definitions of stablity you'd need to do the
+integration (e.g run the ode solver) and then plot or compute a metric of stability
+
+
+
+# Assignment
+
+Consider how you might add hunting  of prey to the predator prey model that we've been using in class
+
+Build this model (e.g add harvesting to the lotvmodK.R), you should make sure that you don't hunt more prey than exist. To ensure that you might also add a minumum prey population input that must be met before hunting is allowed.
+
+Explore how different hunting levels and different minimum prey populations (before hunting is allowed) are likely to effect the stability of the populations of both predator and prey. Use this exploration to recommend a hunting target that will be sustainable (e.g leave you with a stable prey and predator population)
+
+You can assume the following
+rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000,
+
+A key challenge is how you might want to define stability? Its up to you but you will need to write a sentence to explain why you chose the measure that you did.  It could be something as simple as maintaining a population above some value 50 years into the future.
+
+Its also up to you how you "explore" hunting  - you can simply try different values or do it more formally by running your model across a range of values
+
+Submit the Rmarkdown that documents your exploration (e.g how you tested different hunting level and how you defined a stability metric) and provides you estimated sustainable hunting level. 
+
+
+# Review/Extra Material for Discussion
+
+
+
+# Extra Example (LHS)
+
+Here's an example using Latin HyperCube Sampling
+
+With Partial Rank Correlation Coefficient
+
+```{r latin }
+source("../R/lotvmodK.R")
+library(lhs)
+library(epiR)
+
+# create parameter sets...
+factors = c("rprey","K","alpha","eff","pmort")
+nsets=500
+
+# create a latin hyper cube
+sens_pp = randomLHS(nsets, length(factors))
+colnames(sens_pp)=factors
+
+# refine using sampling distributions for each parameter
+sens_pp[,"rprey"]= qunif(sens_pp[,"rprey"], min=0.01, max=0.3)
+sens_pp[,"K"]= qunif(sens_pp[,"K"], min=10, max=200)
+sens_pp[,"alpha"]= qunif(sens_pp[,"alpha"], min=0.1, max=0.4)
+sens_pp[,"eff"]= qnorm(sens_pp[,"eff"], mean=0.3, sd=0.01)
+sens_pp[,"pmort"]= qunif(sens_pp[,"pmort"], min=0.05, max=0.45)
+
+# lets create a metric and wrapper function as we did for our population models
+
+# first our metrics 
+# lets say we  want the maximum and minimum  of both predictor and prey
+
+compute_metrics = function(result) {
+  maxprey = max(result$prey)
+  maxpred = max(result$pred)
+  minprey = min(result$prey)
+  minpred = min(result$pred)
+return(list(maxprey=maxprey, minprey=minprey, maxpred=maxpred, minpred=minpred))}
+
+# build a wrapper function
+
+
+p_wrapper = function(rprey,alpha, eff, pmort, K, currpop, days, func) {
+    parms = list(rprey=rprey, alpha=alpha, eff=eff, pmort=pmort, K=K)
+    result = ode(y=currpop, times=days, func=func, parms=parms) 
+    colnames(result)=c("time","prey","pred")
+  # get metrics
+  metrics=compute_metrics(as.data.frame(result))
+  return(metrics)
+}
+
+
+# run our model for all parameters and extract the results
+currpop=c(prey=1, pred=1)
+days = seq(from=1,to=500)
+allresults = as.data.frame(sens_pp) %>% pmap(p_wrapper, currpop=currpop, days=days, func=lotvmodK)
+ 
+# take results back to unlisted form
+allres = allresults %>% map_dfr(`[`,c("maxprey","minprey","maxpred","minpred"))
+
+
+# range of response across parameter uncertainty
+allresl = allres %>% gather(key="metric",value="pop")
+ggplot(allresl, aes(metric, pop))+geom_boxplot()
+
+# dealing with different scales
+ggplot(allresl, aes(metric, pop, col=metric))+geom_boxplot()+facet_wrap(~metric, scales="free")
+# plot cummulative densities
+
+ggplot(allresl, aes(pop, col=metric))+stat_ecdf(geom="line")+facet_wrap(~metric, scales="free")
+
+# compute PRCCs using epi.prcc
+# lets do first for maxpred
+
+epi.prcc(cbind.data.frame(sens_pp, allres$maxpred))
+
+# try minprey
+epi.prcc(cbind.data.frame(sens_pp, allres$minprey))
+
+
+```
+
+
+# Stability 
+
+How do we think about stablity for multiple outputs (e.g. predator/prey)
+
+Populations don't change when derivatives are zero!
+
+What conditions lead to BOTH derivatives being zero
+
+# Stability For *lotvmod*
+
+* dprey = rprey * prey -  alpha * prey * pred
+* dpred = eff* alpha * prey * pred - pmort *pred
+
+Make dprey and dpred equal to 0 and rearrange
+
+* pred_i = rprey/alpha
+* prey_i = pmort/(eff * alpha)
+
+# Stability For *lotvmodK*
+
+* dprey = rprey * (1-prey/K) * prey -  alpha * prey * pred
+* dpred = eff* alpha * prey * pred - pmort * pred
+
+Make dprey and dpred equal to 0 and rearrange
+
+* prey_i = pmort/(eff * alpha)
+* pred_i = rprey/alpha * (1-prey_i/K)
+
+Try setting you initial conditions close to these values and see what happens
+
+
+```{r stabilitynew}
+
+source("../R/lotvmodK.R")
+# set parameter list
+pars = data.frame(rprey=0.1, alpha=0.6, eff=0.8,pmort=0.4, K=200)
+
+# now lets try initial conditions that will be stable
+preyi = with(pars, pmort/(eff*alpha)) 
+predi = with(pars, rprey/alpha*(1-preyi/K)) 
+
+preyi
+predi
+# times when you want to evaluate
+days = seq(from=1,to=500)
+
+# lets first see what happens when we start with 1 of each
+currpop=c(prey=1, pred=1)
+# run our differential equation solver
+res = ode(func=lotvmodK, y=currpop, times=days, parms=pars)
+# extract the results
+res_smallstart = as.data.frame(res) %>% gather(key="animal", value="pop",-time)
+# graph both populations over time
+p1=ggplot(res_smallstart, aes(time, pop, col=animal))+geom_line()
+p1
+
+# lets first see what happens when we start our estimates of stable populations
+stablepop = c(prey=preyi, pred=predi)
+res = ode(func=lotvmodK, y=stablepop, times=days, parms=pars)
+# estract the results
+res_stablestart = as.data.frame(res) %>% gather(key="animal", value="pop",-time)
+# graph both populations over time
+p2=ggplot(res_stablestart, aes(time, pop, col=animal))+geom_line()
+p2
+
+# explore with some different parameters
+
+```
+
+
+
