@@ -1,0 +1,198 @@
+---
+title: 'Competition and time series inputs'
+output:
+  slidy_presentation:
+    highlight: pygments
+  html_document: default
+  pdf_document: default
+  ioslides_presentation:
+    highlight: pygments
+  beamer_presentation:
+    highlight: pygments
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(sensitivity)
+library(tidyverse)
+library(deSolve)
+library(lhs)
+library(purrr)
+library(ggpubr)
+```
+
+# Dynamic Models
+
+* 2 variable system of equations
+
+* some addition complexity to illustrate
+  * use of time series inputs
+  * coupling models
+  
+# Competition Model
+
+
+Species a (or Company a)
+
+$\frac{\partial s_a}{\partial t} = r_{a} * s_a * (a-(\frac{s_a+\alpha_{ab} * s_b}{K_a}))$
+
+Species b (or Company b)
+
+$\frac{\partial s_b}{\partial t} = r_{b} * s_b * (a-(\frac{s_b+\alpha_{ba} * s_a}{K_b}))$
+
+* $s_a, s_b$ are species populations
+* $r_a, r_b$ are growth rates of each species
+* $K_a, K_b$ are carrying capacities; could be the same for both species but maybe not?
+* $\alpha_{ab}, \alpha_{ba}$ are competitive effect of the other species; could be the same for both species
+
+# Implementation in R
+
+Use the model to answer some interesting questions about competition
+
+* growth rate 
+* market/resource sharing
+* intial conditions
+
+How might you explore this?
+
+# R code example
+```{r implea}
+
+source("../R/dcompetition.R")
+
+dcompetition
+# set up required parameters
+
+pars = list(ra=0.15, rb=0.10, alphaab=0.2, alphaba=0.2, Ka=300, Kb=300)
+
+# set up initial firm/population size
+# con
+initialsize = c(a=25, b=100)
+months = seq(from=1, to=120)
+res = ode(func=dcompetition, y=initialsize, times=months, parms=pars)
+
+resl = as.data.frame(res) %>% pivot_longer(-time, names_to="Group", values_to="Gsize")
+
+# notice how both converge to the carrying capacity
+ggplot(resl, aes(time, Gsize, col=Group))+geom_line()
+
+# what if there is total competition (e.g both share all potential resources), start from same place
+initialsize = c(a=20, b=20)
+pars = list(ra=0.15, rb=0.10, alphaab=1.0, alphaba=1.0, Ka=300, Kb=300)
+res = ode(func=dcompetition, y=initialsize, times=months, parms=pars)
+
+# faster growing group gets more of the market share
+resl = as.data.frame(res) %>% pivot_longer(-time, names_to="Group", values_to="Gsize")
+ggplot(resl, aes(time, Gsize, col=Group))+geom_line()
+
+```
+
+# Think about another strategy you might explore
+
+* what would the ability for one group to find resources that the other couldn't look like?
+* how do initial popultation influence results
+
+
+# Adding some complexity
+
+What if occasionally there are shocks to the system; 
+
+* kind of like disturbance
+* what if we were modeling this separately
+
+How might you do this?
+
+Two considerations
+
+* event severity
+* population vulnerability/sensitivity
+
+# Time series of input event
+
+* Generate time series of events (this could be from another model)
+
+* Code the effects of the events on system in dynamic model
+  * may require more parameters
+  
+* Use this time series as another input
+
+# How to do with our framework
+
+Lets say the disturbance event reduces the group size as follows
+
+**Define**
+
+* sensitivity factor (*sena*, *senb*)
+  potentially different for each group;
+* event occurence  (*shock*) time series
+  * could just be 1/0 (binary) for event modeling
+  * could use a value if you want to take into account severity
+  
+Reduction in group size is  $sena*shock[time]$
+
+Start with just a binary shock - it happens or it doesn't (no severity)
+
+# In R
+
+Take advantage of time in differential equation
+
+We can generate a sequence of events given a probability of an event
+  * lets on average a 20% chance of occurring in a given month
+
+Sample from a binomial distribution
+
+We need a value for all the time steps we are simulating
+
+```{r timeseries}
+
+source("../R/dcompetition_shock.R")
+dcompetition_shock
+
+initialsize = c(a=20, b=20)
+months = seq(from=1, to=120)
+
+# create our disturbance
+shock = rbinom(length(months), size=1, prob=0.2)
+plot(months,shock)
+
+# Set up our parameters include the shock time series
+pars = list(ra=0.15, rb=0.10, alphaab=1.0, alphaba=1.0, Ka=300, Kb=300, sena=0.3, senb=0.1, shock=shock)
+ressk = ode(func=dcompetition_shock, times=months, y=initialsize, parms=pars)
+
+resskl = as.data.frame(ressk) %>% pivot_longer(-time, names_to="Group", values_to="Gsize")
+ggplot(resskl, aes(time, Gsize, col=Group))+geom_line()
+# what do you notice
+
+
+ggplot(resskl, aes(time, Gsize, col=Group))+geom_line()+geom_line(data=resl, aes(time, Gsize, col=Group), linetype="dotted", lwd=2)
+```
+
+# Explore a bit more
+
+* different sensitivities to disturbance
+* disturbance severity (not just 0 or 1, maybe 1 for most severe, 0.5 for moderate)
+
+```{r}
+
+shock = sample(c(1,0.5,0), size=100, prob=c(0.01, 0.1, 0.89), replace=TRUE)
+plot(shock)
+```
+
+
+
+# Putting components together
+
+where do parameters fit?
+
+![](../img/fishmodel1.jpg)
+
+
+# With parameters
+
+![](../img/fishmodel2.jpg)
+
+
+# Please read 
+
+Pollution EJ article on canvas for Tuesday
