@@ -1,0 +1,463 @@
+---
+title: "Age Structure Population Modelling"
+output:
+  slidy_presentation:
+    highlight: pygments
+  html_document: default
+  pdf_document: default
+  ioslides_presentation:
+    highlight: pygments
+  beamer_presentation:
+    highlight: pygments
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(sensitivity)
+library(tidyverse)
+library(purrr)
+library(ggpubr)
+```
+
+# Dynamic Models - Discrete 
+
+Recall using in our diffusion model where we divided the world into "chunks"
+
+This can be appropriate for...
+* discrete population numbers (annual human populations)
+
+Still an approximation because births/deaths happen all the time but "reasonable" to ignore
+
+We can use "looping" rather than iteration
+
+Makes it easy to do systems of equations 
+  * tracking multiple variables
+  
+# Discrete Dynamic Example (age structured population)
+
+* tracking multiple variables
+  * numbers of individuals in each age group
+  * note we are "discretizing" both time and age here
+  
+A system of equation that evolves the age struture (each age group) over time
+
+* Sometimes called a population "matrix" model
+
+# The basics
+
+Suppose a population has individuals in different age
+groups (lets say 4)
+
+* Populations of individuals in each group: 
+  * n0(t)
+  * n1(t),
+  * n2(t)
+  * n3(t), where t is time
+
+* Groups - lump all individuals in that age range (even
+though in reality there will be a range of ages
+
+* Dynamically model the evolution of that population
+
+# Evolving
+
+To evolve the population we also need to think about
+births, deaths and aging
+
+* births depend on fertility rates of the different
+groups
+
+* aging simply evolves one group to the next
+
+* death remove individuals from a group
+
+# Defining growth for overall population numbers
+
+if b is birth rate and d is death rate
+
+* n(t+1) = n(t) + (b-d) n(t)
+
+* n(t+1) = (1+r) n(t) where r is an intrinsic rate of
+increase (proportional/per capita rate of change)
+
+* n(t+1) = *l* n(t) = where *l* is really the finite (geometric
+growth rate)
+
+# For multiple age classes we look survival probability
+
+*  define a survival parameter $S_k$ that gives the fraction of
+individuals that survive from age class k to age class k+1,
+
+* for example n2(t + 1) = $S_1$ * n1(t).
+
+* in this case, the time step/increment must be the same as
+the increment between age classes!
+
+* we often work with 1 year but could be 1 month (but age
+classes would also be 1 month apart)
+
+# Births
+
+
+
+Births are little trickier because they may come from
+multiple age classes, so define the
+
+* parameter $F_j$ as the per capita fertility in age class j.
+* The newly born all enter into age class 1, i.e.
+
+* n1(t + 1) = $F_2$ * n2(t) + $F_3$ * n3(t)
+
+* assume that population census is right after breeding
+*  note that fertility is not fecundity (birth per capita but
+includes survivability - live almost year to be included)
+
+
+![](../img/birth.jpg)
+
+# Set up the Leslie Matrix
+
+![](../img/leslie1.jpg)
+
+# Use it with matrix multiplication to iterate
+
+Could use nested *for* loops here but this is more efficient
+
+  * outer loop for time
+  * inner loop through each group
+
+
+Matrix multiplication is often used for discrete system of equation dynamic models
+
+
+![](../img/lesliematrix.jpg)
+
+
+# If you keep iterating
+
+repeating above gets you to
+
+![](../img/respop.jpg)
+
+
+# Lets see in R
+
+```{r setupleslie}
+nclasses = 5
+
+# create a growth matrix to store fertility and survivability information
+gmatrix=matrix(nrow=nclasses, ncol=nclasses)
+gmatrix
+
+# change NAs to zero
+gmatrix[]=0.0
+gmatrix
+
+# assign values for fertility for each of the age classes 
+# notes that fertility rates are births per capita (number in class) per
+# time step - time step here is decade - but could be hours
+fert =  c(0,0.4,0.3,0.1,0.01)
+
+# enter into our matrix
+ gmatrix[1,]=fert
+ 
+ # now add survivability 
+ # survivability (to the next class) is also per time step
+gmatrix[2,1]=0.5
+gmatrix[3,2]=0.8
+gmatrix[4,3]=0.2
+gmatrix[5,4]=0.1
+
+# we als want to to account for the oldest population group - they don't transfer to another group
+# but they do die - this will be survivability per time step but they just stay in their class/group
+gmatrix[5,5]=0.1
+
+gmatrix
+
+```
+
+# Use Leslie matrix to  grow the population
+
+
+```{r simplegrowth}
+
+# start with an initial population, lets say 1 individual in each class
+
+p0 = rep(1, times=nclasses)
+
+# advance to the next time step
+# note the use of matrix multiplication
+
+p1 = gmatrix %*% p0
+p1
+
+# has the total number of individuals changed?
+
+
+
+
+sum(p1)
+sum(p0)
+
+# growth rate
+sum(p1)/sum(p0)
+
+#add another year
+p2 = gmatrix %*% p1
+
+# combined
+pop = cbind.data.frame(p0,p1,p2)
+pop$age = c("0-1","1-10","11-20","21-50","50 and above")
+
+popl = pop %>% pivot_longer(names_to="timestep",values_to="pop",-age)
+ggplot(popl, aes(timestep, pop,fill=as.factor(age)))+geom_col(position="dodge")+labs(fill="Age Group")
+
+
+# how might you change parameters to have the population grow?
+
+```
+
+# Multiple Time Steps
+
+use a wrapper function to evolve a population through time
+
+* inputs = survivability, fertility, initial population, time steps (all as vectors)
+* output =  populations as a total by time and as broken down by age by time 
+* a dynamic model - difference equations - similar to our diffusion model
+
+
+Lets look at a bigger population - China
+
+Break it in to decades,first decade of life (0 to 10 years old)
+final decade greater than 90
+
+
+
+ 
+```{r multitime}
+
+source("../R/evolve_pop.R")
+
+evolve_pop
+
+# example evolve China pop
+# fertility rates
+F1 = 0.0
+F2 = 0.25/2
+F3 = 0.5/2
+F4 = 0.25/2
+# assume all others also zero
+# why divide by 2?
+
+# survivability - based on mortality rates per thousand per decade
+p12 = 1-79/1000 
+p23 = 1-9.8/1000
+p34 = 1-16/1000
+p45 = 1-25/1000
+p56 = 1-10/1000
+p67 = 1-110/1000
+p78 = 1-270/1000
+p89=1-630/1000
+p99 = 0.1
+
+# initial population parameters
+ini = c(235,224,182,124,95,69,42,24,6)
+ndecades = 15
+fert_china = c(0,F2,F3,F4,0,0,0,0,0)
+surv_china = c(p12,p23,p34,p45,p56,p67,p78,p89,p99)
+china_pop=evolve_pop(fert_china, surv_china, ini, ndecades)
+
+head(china_pop)
+
+# graph diffeernt components of the output
+# total population
+
+# add decade 
+decade = seq(from=1, to=ndecades)
+china_tot = cbind.data.frame(decade=decade, poptot=china_pop$poptot)
+ggplot(china_tot, aes(decade, poptot))+geom_col()+labs(y="Total Popultation")
+
+
+# plot information about ages
+china_ages = cbind.data.frame(decade=decade, t(china_pop$popbyage))
+china_agesl = china_ages %>% pivot_longer(names_to="agecat", values_to="pop",-decade)
+ggplot(china_agesl, aes(decade, pop, fill=agecat))+geom_col()+labs(y="Population", fill="Age Group")
+
+```
+ 
+#  Find parameters that mantain a stable population!
+ 
+# Microbial Populations - Another example 
+ 
+Lets try with a more complicated example - evolving an age structured population
+
+Sensitivity **To**: fertility and survivability rates
+  
+Sensitivity **Of**: total population after 3 months
+  
+Assume we are looking at microbial population and monthly fertility and mortality rates; but format the same as china example
+
+# Microbial Population Parameters
+
+These microbes live for approximately 2 years
+they are reproduce after 1 month of maturation
+
+* 3 age groups
+* 0-1 months old
+* 1-2 months old
+* more than 2 months
+
+we can impact their survivability so we want to know how sensitive populations will be after 6 months if we do something to alter survivablity rates; 
+but we also have uncertainty in what we know about reproduction rates
+
+
+* 0-1 months - no fertility = survivability about 90%
+* 1-2 months - population tends to double, survivability about 70%
+* more 2 months - population fertility around 20%, suvivability only 30%
+
+
+Try setting this up...
+```{r  example}
+
+source("../R/evolve_pop.R")
+
+
+# set up best guess case
+# survivability - based on mortality rates per thousand per decade
+p12 = 0.9
+p23 = 0.7
+p34 = 0.2
+
+F1= 0.0
+F2 = 2.0
+F3 = 0.3
+
+# initial population parameters
+ini = c(1000,1000, 1000)
+nmonths = 12
+fert_micro = c(F1,F2,F3)
+surv_micro = c(p12,p23,p34)
+micro_pop=evolve_pop(fert_micro, surv_micro, ini, nmonths)
+
+# population after 12 months
+micro_pop$poptot[12]
+```
+
+# Sensitivity Analysis for matrix populations
+
+Now lets use Sobel sensitivity analysis to explore the how our intervention might impact the population...
+
+
+AND account for uncertainty in some of our parameters
+
+Reminder
+Sobel sensitivity analysis breaks variance of output into 
+
+* variance associated directly with parameter alone (fraction associated with each parameter, sum to 1)
+* variance associated with parameter and interaction with other parameters (sum can be more than 1)
+
+# Steps
+
+* run sobel to get parameter sets in a sensitivity analysis object
+* run model with those parameter sets
+* tell the senstivity object about results associated with each parameter set
+* look at sensitivity analysis metric from sobel
+
+```{r sobel}
+
+library(sensitivity)
+
+# survivability - based on mortality rates per thousand per decade
+nsample=200
+
+p12 = 0.9
+p23 = 0.7
+p34 = 0.2
+
+# create our two samples for Sobel
+# first do our survivability
+ps1 = cbind.data.frame(p12=runif(min=0.4, max=0.92, n=nsample), p23 = runif(min=0.3, max=0.72, n=nsample),
+                       p34 = runif(min=0.05, max=0.22, n=nsample))
+
+ps2 = cbind.data.frame(p12=runif(min=0.4, max=0.92, n=nsample), p23 = runif(min=0.3, max=0.72, n=nsample),
+                       p34 = runif(min=0.05, max=0.22, n=nsample))
+
+# now include uncertainty in our Fertility
+F1= 0.0
+F2 = 2.0
+F3 = 0.3
+
+fs1 = cbind.data.frame(f1=rnorm(mean=0, sd=0, n=nsample), 
+                       f2 = rnorm(mean=2.0, sd=0.1, n=nsample),
+                       f3 = rnorm(mean=0.3, sd=0.01, n=nsample))
+
+fs2 = cbind.data.frame(f1=rnorm(mean=0, sd=0, n=nsample), 
+                       f2 = rnorm(mean=2.0, sd=0.1, n=nsample),
+                       f3 = rnorm(mean=0.3, sd=0.01, n=nsample))
+
+
+# put servivability and fertility together
+allp1 = cbind.data.frame(ps1,fs1)
+allp2 = cbind.data.frame(ps2,fs2)
+
+
+# get sobel samples
+
+sens_micro = sobolSalt(model = NULL, allp1, allp2, nboot = 100)
+
+head(sens_micro$X)
+nsim=nrow(sens_micro$X)
+
+# add parameter names
+colnames(sens_micro$X)=colnames(allp1)
+# run model and save what we care about: final population after 12 months 
+# this is already output by evolve_pop so we don't need a compute_metric function
+
+ini = c(1000,1000, 1000)
+nmonths = 12
+
+
+# as before combine our application of the the dynamics model - for each
+# parameter set, with code to extract our metric of interest (final population)
+p_wrapper = function(p12, p23, p34, f1,f2,f3,use_func, initialpop, nstep ) {
+fertility=c(f1,f2,f3)
+survivability= c(p12,p23,p34)
+res = use_func(survivability =survivability, fertility = fertility, initialpop=initialpop, nstep=nstep)
+# now return the final population total
+return(finalpop=res$poptot[nstep])
+}
+
+# use pmap here so we can specify rows of our sensitivity analysis parameter object 
+res = as.data.frame(sens_micro$X) %>% pmap_dbl(p_wrapper, initialpop=ini, nstep=nmonths, use_func=evolve_pop)
+         
+# plot results (variation in final population across all parameter)
+# ggplot needs a dataframe - so do a quick conversion with data.frame
+ggplot(data.frame(finalpop=res), aes(x=finalpop))+geom_density()
+
+# or a boxplot
+ggplot(data.frame(finalpop=res), aes(x="", y=finalpop/1000) )+geom_boxplot(fill="blue")+
+  theme(axis.title.x = element_blank())+labs(y="Final Pop (in 1000s)")
+
+# give our results to sensitivity structure
+
+sens_micro=tell(sens_micro, res)
+
+# loot at results
+sens_micro$S
+sens_micro$T
+
+# make this a bit easier to see
+rownames(sens_micro$S) = colnames(sens_micro$X)
+sens_micro$S
+rownames(sens_micro$T) = colnames(sens_micro$X)
+sens_micro$T
+
+# notice how p12 is by far the most sensitive parameter
+
+# graph the most sensitive parameter
+tmp = cbind.data.frame(sens_micro$X, pop12=sens_micro$y)
+ggplot(tmp, aes(p12, pop12))+geom_point()+labs(x="Survivability of 1 to older",y="pop after 12 months")
+```
+
+
