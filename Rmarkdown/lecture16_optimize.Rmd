@@ -1,0 +1,390 @@
+---
+title: "Optimization "
+output:
+  slidy_presentation:
+    highlight: pygments
+  html_document: default
+  pdf_document: default
+  ioslides_presentation:
+    highlight: pygments
+  beamer_presentation:
+    highlight: pygments
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Optimization
+
+Sometimes you want to converge on a single parameter set
+
+* if that parameter reflects a decisions (harvest rate), what should you try
+
+
+Selecting parameters that maximize or minimize something 
+
+  * if that something is model performance its a form of calibration
+  
+  * sometimes its finding parameter values that push the system to a desirable state
+  
+Examples?
+
+
+
+#  Optimization 
+
+Optimization requres that you define..
+
+* the *objective/output* that you want to minimize or maximize
+
+* the *parameters* (or inputs) that you can “play” with to change the output
+
+* the *model* (or set of models) that define the relationship between the output and the parameters
+
+---
+
+# Optimization 
+
+[![](optimization/assets/img/image4.png)]
+
+[![](optimization/assets/img/image2.jpeg)]
+
+
+# Optimization 
+
+*Objective*  what you want to maximize or minimize
+based on your output variable (or some transformation of it)
+
+the output variable may be multi-dimensional if you are trying to minimize two or more things at the same time
+
+* minimize energy use and water use
+* maximize profit and minimize energy use
+
+---
+
+#  Optimization 
+
+Objectives using two or more variables
+
+**Pareto optimality**
+
+point where any change in one variable will reduce objective for the other variable (balancing your multiple objectives)
+
+One option - define an objective function (single variable) that combines the two variables useful because you can decide on the weighting
+
+* 0.5*energy.use + 0.5*cost
+
+* 0.8*energy.use + 0.2*cost
+
+make sure that energy.use and costs are relative values so that it makes sense to add them
+
+alot like developing *performance metrics* (performance metrics are a type of objective function)
+
+#  Optimization 
+
+*Parameters*
+
+You can have more than one “free” parameters - parameters that you can vary to minimize or maximize your objective 
+
+* minimizing energy use by changing both time of day that a factory functions and the operating temperature
+
+* minimizing air pollution by reducing the number of drivers and the time spent driving
+
+* maximizing species richness by increasing fire frequency and reducing fire severity
+
+---
+
+#  Optimization 
+
+
+Two free parameters - Minimize energy use as a function of temperature AND type of substrate/material
+
+[![](optimization/assets/img/image5.png)]
+
+
+
+---
+
+#  Optimization 
+
+How easy the optimization is depends on the model - or the functional relationship between free parameters and the objective function
+
+Three possibilities
+
+* the minimum can be derived mathematically
+
+* you can graph the relationships and “see” the minimum
+
+* you get there by trial and error - we have very sophisticated ways of doing the “trial and error”
+
+---
+
+#  Optimization Example
+
+
+**When should a farmer harvest given a model of changing export prices for rice**
+
+
+[Example of optimization of waiting times for food profit maximization](http://derivative-functions.cours-de-math.eu/advanced-math-english14.php)
+
+![](optimization/assets/img/image1.gif)
+
+Finding the “optimal” value of the parameter (waiting weeks) and the value of the objective function (price) at the optimum is visually easy to assess
+
+
+
+
+# Key Optimization Challenge
+
+Avoiding local minimum and maximum
+
+![](optimization/assets/img/image7.png)
+
+Similar to why we use Sobel to search parameter space
+[non-local minuimum more detail](http://www.smashingmagazine.com/2010/08/26/in-defense-of-a-b-testing/)
+
+Optimization approaches vary in terms of ability
+
+  * to find non-local optima
+  * ability to handle multiple criteria
+
+---
+
+#  Optimization 
+
+
+![](optimization/assets/img/image1.tif)
+www.mathworks.com
+
+![](optimization/assets/img/image8.png)
+[www.mathworks.com](http://www.mathworks.com)
+
+# Optimization Techniques
+
+Math geeks and engineers have developed all kinds of strategies for search parameter spaces to find minimum, that deal with complex spaces with lots non-local minimum
+
+![](optimization/assets/img/image4.jpeg)
+
+---
+
+#  Optimization 
+
+One more distinction
+
+* Constrained vs unconstrained
+
+unconstrained …what we’ve been looking at in calibration exercies
+
+* Constrained….add rules about what parameters can be selected (e.g  you must purchase at least 20 units of x)
+
+---
+
+#  Optimization 
+
+Optimization of more complex models 
+
+- think about coming up with the optimal sea wall size in coastal flooding model
+- may include running a dynamic model - optimal harvest rate
+
+Almost always requires a search "technique" because input-output relationships are non-linear 
+
+---
+
+#  Optimization in R 
+
+Different R functions available that help with
+automate the “searching” for you
+
+* dealing with multi-dimensional search spaces
+
+* dealing with complex (multi-min, multi-max) search spaces
+
+* constrained/unconstrained
+
+
+---
+
+#  Optimization in R 
+
+ If you can solve it mathematically/visually then do so - you can use math/graphs to find the optimal value 
+ 
+If not R can help you do that
+two steps
+
+1. code your model as a function
+2. send function, and parameters to the optimizer
+3. the optimizer searches for a minimum value of the model output
+
+
+#  Optimization in R 
+
+
+*Optimize* (function to be minimized, lower bound, upper bound..)
+
+Can also provide:
+
+* tol	- tolerance (how close do you have to get )
+* maximum  - if maximum=T, finds the maximum; default is finding the minimum
+
+
+---
+
+
+
+# Simple Example
+
+Pollution output as a function of temperature
+
+```{r}
+pollutant_export = function(temperature) {
+        result =( (temperature-2)**2)
+				return(result) 
+        }
+
+temps = seq(from=-3,to=10)
+
+pollution = data.frame(temperature=temps, export=pollutant_export(temps))
+ggplot(pollution, aes(temperature,export))+geom_point( col="green", size=10, pch="*")+theme_bw()
+
+
+
+
+
+```
+
+What temperature minimizes pollutant export?
+
+Easy to see from graph
+
+# Optimize in R - Simple example
+
+Even though we can solve visually lets try to use optimize anyway
+
+*optimize*
+
+requires function to be minimized, lower and upper bounds of parameter, and tolerance (optional)
+
+tolerance is how close do you need to get to minimum
+
+Returns parameter value that gives the minimum
+and how close you got
+
+```{r}
+
+result=optimize(pollutant_export, lower=-3, upper=10)
+result
+```
+
+#  Optimization in R - a more complex example
+
+Lets say we have an option to purchase irrigation water; the contract requires us to commit to purchasing the irrigation water for a number of years in the future; we want to know how much irrigation water to purchase to maximize our profit from growing almonds (or some other crop)
+![](optimization/assets/img/image5.jpeg)
+
+
+
+#  Optimization in R 
+
+What we have
+
+* we have a model of yield as a function of irrigation and climate
+* we have a cost of irrigation water and prices for yields
+* we have all of this for 10 years
+
+![](optimization/assets/img/image6.jpeg)
+
+
+# Combined models
+
+Lets return to a model of crop yields - we have a new model - in compute_yield that includes the impact of irrigation on yields, given some crop parameters and precipitation and temperature
+
+**compute_yield**
+
+We also have a model of profit that accounts for price of the crop and costs of irrigation
+
+**compute_profit**
+
+What is the optimal irrigation amount given price of crop and cost of irrigation?
+
+# Coupled models
+
+* recall how we combined yield, NPV and profit models together into a single function - a wrapper function
+
+* *compute_profit* - calls *compute_yield* 
+
+We can use **optimize** here on our coupled model - leave one input or parameter "free" 
+- e.g use for upper and lower bounds in the optimation
+
+We will keep irrigation "free"
+
+# Structure
+
+compute_yield
+
+* T annual temperature (C)
+
+* P annual precipitation (mm)
+* irr  irrigation in (mm) 
+* crop.pars
+
+      * max.water  maximum water requirement (mm)
+      * Topt optimal temperature (C)
+      * ts slope on temperature/yield relationship
+      * tp slope on precipitation/yield relationship
+      * base.yield baseline yield  (kg)
+
+Additional Parameters for Compute_Profit
+
+* discount (for computing NPV)
+* price. (price for yield $/kg)
+* cost (cost of irrigation $/mm)
+
+# code
+```{r irrigationopt}
+
+source("../R/compute_profit.R")
+source("../R/compute_yield.R")
+source("../R/compute_NPV.R")
+
+compute_profit
+
+compute_yield
+
+compute_NPV
+crop_pars = c(ts=0.4, tp=0.5, base.yield=500, Topt=25, max.water=800)
+
+# lets assume water cost $150 per mm/yr (depth of water per crop area)
+optimize(compute_profit, lower=0, upper=400, T=c(20,30,25), P=c(250,144,100), discount=0.01, price=50, cost=150, crop.pars=crop_pars,  maximum=TRUE)
+
+
+# try with cheaper water
+optimize(compute_profit, lower=0, upper=400, T=c(20,30,25), P=c(250,144,100), discount=0.01, price=50, cost=25, crop.pars=crop_pars,  maximum=TRUE)
+
+
+```
+
+# Sensitivity analysis AND optimization?
+
+Why not?
+
+You can run your optimization for a range of water prices
+
+```{r optrange}
+
+water_price=seq(from=1, to=50, by=0.5)
+
+# use map to run optimization for different water prices
+# lets also broaden our irrigation range
+result = water_price %>% map_df(~optimize(compute_profit, lower=0, upper=1000, T=c(20,30,25), P=c(250,144,100), discount=0.01, price=50, cost=.x, crop.pars=crop_pars,  maximum=TRUE))
+
+# add water price to result
+result$water_price = water_price
+
+# graph the results
+ggplot(result, aes(water_price, maximum))+geom_point(col="green", size=2)
+ 
+# how could you do this for a range of prices for crops
+
+```
